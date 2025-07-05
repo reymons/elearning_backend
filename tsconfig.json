@@ -1,0 +1,30 @@
+{
+    "compilerOptions": {
+        "target": "es2024",
+        "module": "nodenext",
+        "lib": ["es2024"],
+        "moduleResolution": "nodenext",
+        "baseUrl": ".",
+        "outDir": "./build",
+        "esModuleInterop": true,
+        "isolatedModules": true,
+        "forceConsistentCasingInFileNames": true,
+        "strict": true,
+        "strictPropertyInitialization": false,
+        "skipLibCheck": true,
+        "noImplicitThis": false,
+        "types": ["jest"],
+        "paths": {
+            "@/*": [
+                "./src/*"
+            ]
+        }
+    },
+    "include": [
+        "src/**/*.ts",
+        "scripts/**/*.ts"
+    ],
+    "exclude": [
+        "node_modules"
+    ]
+}
