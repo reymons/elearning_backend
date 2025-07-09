@@ -9,3 +9,7 @@ export const db = pgp()({
     password: DB.PASSWORD,
 });
 
+export async function closeDatabase() {
+    await db.$pool.end();
+}
+

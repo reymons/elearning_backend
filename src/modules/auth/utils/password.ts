@@ -25,7 +25,7 @@ export async function hashPassword(password: string): Promise<Buffer> {
     const salt = crypto.randomBytes(PASSWORD_SALT_LEN);
     const hash = await scryptHashPassword(password, salt);
     const buffer = Buffer.alloc(PASSWORD_HASH_FULL_LEN);
-    
+
     for (let i = 0; i < salt.byteLength; i++) {
         buffer[i] = salt[i];
     }

@@ -8,9 +8,9 @@ export abstract class User {
     email: string;
     password: string;
     date_of_birth: string;
-    created_at: number;
+    created_at: string;
 
-    static getById(id: number) {
+    static async getById(id: number) {
         return db.one<User>("SELECT * FROM app_user WHERE id = $1", id);
     }
 

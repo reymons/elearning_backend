@@ -1,69 +1,82 @@
-import * as yup from "yup";
-import { type FastifyInstance } from "fastify";
-import { toPersonalUser, User } from "@/models/user";
-import { SignInBody, SignUpBody } from "./types";
-import { hashPassword, verifyPassword } from "./utils/password";
-import { setJwtTokens } from "./utils/jwt";
 import { REFRESH_TOKEN_COOKIE, verifyToken } from "@/lib/jwt";
+import { FastifyInstance } from "@/lib/fastify";
+import { errorSchema } from "@/lib/error";
 import { RefreshTokenBlacklist } from "@/models/rtb";
+import { personalUserSchema, toPersonalUser, User } from "@/models/user";
+import { signInSchema, signUpSchema } from "./schema";
+import { setJwtTokens } from "./utils/jwt";
+import { verifyPassword } from "./utils/password";
+import { signUp } from "./service";
 
-const maxDate = new Date();
-maxDate.setFullYear(maxDate.getFullYear() - 6);
-
-// @ts-ignore
-// yup.date() returns a string, but ts is unable to understand that
-const signUpSchema: yup.Schema<SignUpBody> = yup.object({
-    firstName: yup.string().required(),
-    lastName: yup.string().required(),
-    dateOfBirth: yup.date().required().min("1920-01-01").max(maxDate),
-    email: yup.string().required().email(),
-    password: yup.string().required().min(6).max(60), // TODO: validate for a strong password
-});
-
-const signInSchema: yup.Schema<SignInBody> = yup.object({
-    email: yup.string().required(),
-    password: yup.string().required(),
-});
-
-export function register(fastify: FastifyInstance) {
-    fastify.post("/auth/sign-up", async (req, rep) => {
-        const body = await signUpSchema.validate(req.body);
-        const user = await User.create({
-            ...body,
-            password: await hashPassword(body.password),
-        });
-        setJwtTokens(user.id, rep);
-        rep.code(201).send(toPersonalUser(user));
-    });
-
-    fastify.post("/auth/sign-in", async (req, rep) => {
-        const body = await signInSchema.validate(req.body);
-        try {
-            const user = await User.getByEmail(body.email);
-            if (await verifyPassword(body.password, Buffer.from(user.password))) {
-                setJwtTokens(user.id, rep);
-                rep.code(200).send(toPersonalUser(user));
-            } else {
-                rep.code(400).send({ message: "Invalid email or password" });
+export default function register(fastify: FastifyInstance) {
+    fastify.route({
+        method: "POST",
+        url: "/auth/sign-up",
+        schema: {
+            tags: ["Authorization"],
+            body: signUpSchema,
+            response: {
+                201: personalUserSchema,
+                400: errorSchema,
             }
-        } catch {
-            rep.code(400).send({ message: "Invalid email or password" });
+        },
+        async handler(req, reply) {
+            const user = await signUp(req.body);
+            setJwtTokens(user.id, reply);
+            reply.code(201).send(toPersonalUser(user));
         }
     });
 
-    fastify.post("/auth/refresh", async (req, rep) => {
-        const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE];
-        if (!refreshToken) {
-            rep.code(400).send({ message: "No refresh token" });
-            return;
-        }
-        try {
-            const user = verifyToken(refreshToken);
-            await RefreshTokenBlacklist.add(refreshToken, user.id);
-            setJwtTokens(user.id, rep);
-            rep.code(201).send();
-        } catch {
-            rep.code(400).send();
+    fastify.route({
+        method: "POST",
+        url: "/auth/sign-in",
+        schema: {
+            tags: ["Authorization"],
+            body: signInSchema,
+            response: {
+                200: personalUserSchema,
+                400: errorSchema,
+                404: errorSchema,
+            }
+        },
+        async handler(req, reply) {
+            const body = req.body;
+            try {
+                const user = await User.getByEmail(body.email);
+                if (await verifyPassword(body.password, Buffer.from(user.password))) {
+                    setJwtTokens(user.id, reply);
+                    reply.code(200).send(toPersonalUser(user));
+                } else {
+                    reply.err(400, "Invalid email or password");
+                    reply.err(400, "Invalid email or password");
+                }
+            } catch {
+                reply.err(400, "Invalid email or password");
+            }
         }
     });
-}
+
+    fastify.route({
+        method: "POST",
+        url: "/auth/refresh",
+        schema: {
+            tags: ["Authorization"],
+        },
+        async handler(req, reply) {
+            const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE];
+            if (!refreshToken) {
+                reply.err(400, "No refresh token");
+                return;
+            }
+            try {
+                const user = verifyToken(refreshToken);
+                await RefreshTokenBlacklist.add(refreshToken, user.id);
+                setJwtTokens(user.id, reply);
+                reply.code(201).send();
+            } catch {
+                reply.err(400, "Token has been already used");
+            }
+        }
+    });
+};
+
